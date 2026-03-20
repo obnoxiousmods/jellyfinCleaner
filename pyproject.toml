@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-jellyfin-cleanup = "jellyfin_cleanup:main_sync"
+jellyfin-cleanup = "jellyfin_cleanup.core:main_sync"
 
 [project.optional-dependencies]
 dev = [
@@ -25,7 +25,7 @@ dev = [
 ]
 
 [tool.setuptools]
-py-modules = ["jellyfin_cleanup"]
+packages = ["jellyfin_cleanup"]
 
 [tool.ruff]
 line-length = 100
