@@ -18,15 +18,23 @@ A command-line tool to find and delete Jellyfin library items by path prefix —
 
 ## Installation
 
-```bash
-# From source (recommended)
-pip install .
+### Quick install with pip
 
-# Or in editable mode for development
-pip install -e ".[dev]"
+```bash
+pip install .
+```
+
+### Quick install with uv (in a virtual environment)
+
+```bash
+uv venv
+source .venv/bin/activate   # Linux/macOS
+uv pip install .
 ```
 
 This installs the `jellyfin-cleanup` command.
+
+> **📖 For detailed installation instructions** (multiple methods, troubleshooting, and more) see [INSTALLATION/INSTALLATION.md](INSTALLATION/INSTALLATION.md).
 
 ## Quick Start
 
