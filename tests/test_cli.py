@@ -109,6 +109,7 @@ def test_default_delete_batch_size():
 def test_default_flags_false():
     cfg = _parse([])
     assert cfg.dry_run is False
+    assert cfg.bad_data is False
     assert cfg.yes is False
     assert cfg.verbose is False
     assert cfg.force_rescrape is False
@@ -123,6 +124,11 @@ def test_dry_run_flag():
 def test_yes_flag():
     cfg = _parse(["--yes"])
     assert cfg.yes is True
+
+
+def test_bad_data_flag():
+    cfg = _parse(["--badData"])
+    assert cfg.bad_data is True
 
 
 def test_verbose_short_flag():

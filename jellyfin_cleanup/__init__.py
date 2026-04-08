@@ -11,6 +11,7 @@ from .database import (
     Database,
     db_connect,
     db_stats,
+    get_bad_data_targets,
     get_pending_targets,
     mark_deleted,
     mark_failed,
@@ -30,6 +31,7 @@ __all__ = [
     # Database (backward-compat free functions)
     "db_connect",
     "db_stats",
+    "get_bad_data_targets",
     "get_pending_targets",
     "mark_deleted",
     "mark_failed",
