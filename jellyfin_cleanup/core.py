@@ -128,4 +128,8 @@ def main_sync() -> None:
     """Entry point for the ``jellyfin-cleanup`` console script."""
     cfg = parse_args()
     setup_logging(cfg.verbose)
-    asyncio.run(main(cfg))
+    try:
+        asyncio.run(main(cfg))
+    except KeyboardInterrupt:
+        print("\nInterrupted.")
+        sys.exit(130)
