@@ -81,9 +81,8 @@ async def main(cfg: argparse.Namespace) -> None:
         print(f"\nItems to delete ({len(targets)}):")
         if cfg.bad_data:
             for row in targets[:30]:
-                reason = row["bad_reason"] or "unknown bad metadata"
                 print(
-                    f"    [{row['type']:12}] {row['name']} ({reason})"
+                    f"    [{row['type']:12}] {row['name']} ({row['bad_reason']})"
                     f" - {row['path'] or '<no path>'}"
                 )
             if len(targets) > 30:

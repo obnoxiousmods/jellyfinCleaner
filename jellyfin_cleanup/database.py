@@ -276,7 +276,7 @@ def _initialize_items_table(conn: sqlite3.Connection) -> None:
 
 
 def _media_source_count(item: dict) -> int | None:
-    if "MediaSources" not in item:
+    media_sources = item.get("MediaSources")
+    if media_sources is None:
         return None
-    media_sources = item.get("MediaSources") or []
-    return len(media_sources)
+    return len(media_sources or [])
