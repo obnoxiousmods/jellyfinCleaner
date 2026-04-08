@@ -30,10 +30,24 @@ class JellyfinClient:
             pool=cfg.timeout_pool,
         )
         max_conn = max(cfg.fetch_concurrency, cfg.delete_concurrency) + 2
+        # Build a MediaBrowser auth string for the Authorization / X-Emby-Authorization headers.
+        # This format is required by older Jellyfin builds and all Emby versions, while
+        # X-Emby-Token / X-MediaBrowser-Token covers newer Jellyfin builds.
+        _mb_auth = (
+            f'MediaBrowser Client="JellyfinCleaner", Device="CLI", '
+            f'DeviceId="jellyfin-cleaner-cli", Version="1.0", Token="{cfg.api_key}"'
+        )
         self._client = httpx.AsyncClient(
             base_url=cfg.url,
             headers={
+                # Modern Jellyfin (≥ 10.x)
                 "X-Emby-Token": cfg.api_key,
+                # Older Jellyfin / pre-rename builds
+                "X-MediaBrowser-Token": cfg.api_key,
+                # Standard HTTP Authorization header — accepted by Jellyfin ≥ 10.4
+                "Authorization": _mb_auth,
+                # Emby-style header — accepted by Emby and early Jellyfin forks
+                "X-Emby-Authorization": _mb_auth,
                 "Content-Type": "application/json",
             },
             timeout=timeout,
