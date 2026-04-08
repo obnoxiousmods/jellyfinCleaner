@@ -64,7 +64,7 @@ async def main(cfg: argparse.Namespace) -> None:
 
         if cfg.bad_data:
             if cfg.target_paths:
-                log.info("--badData set; ignoring provided target paths.")
+                log.info("--badData/--bad-data set; ignoring provided target paths.")
             targets = db.get_bad_data_targets()
             log.info("Found %d pending/failed items with bad metadata", len(targets))
         else:

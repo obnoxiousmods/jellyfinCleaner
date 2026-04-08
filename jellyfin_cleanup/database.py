@@ -279,4 +279,4 @@ def _media_source_count(item: dict) -> int | None:
     media_sources = item.get("MediaSources")
     if media_sources is None:
         return None
-    return len(media_sources or [])
+    return len(media_sources)
