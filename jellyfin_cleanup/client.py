@@ -157,7 +157,7 @@ class JellyfinClient:
                 "/Items",
                 params={
                     "Recursive": "true",
-                    "Fields": "Path",
+                    "Fields": "Path,IndexNumber,ParentIndexNumber,MediaSources",
                     "Limit": self.cfg.page_size,
                     "StartIndex": start_index,
                 },

@@ -6,6 +6,7 @@ import pytest
 from jellyfin_cleanup import (
     db_connect,
     db_stats,
+    get_bad_data_targets,
     get_pending_targets,
     mark_deleted,
     mark_failed,
@@ -86,6 +87,34 @@ def test_upsert_missing_optional_fields(conn):
     assert row["path"] == ""
 
 
+def test_upsert_persists_media_metadata_fields(conn):
+    upsert_items(
+        conn,
+        [
+            {
+                "Id": "meta1",
+                "Name": "Episode 1",
+                "Type": "Episode",
+                "Path": "/shows/a/s01e01.mkv",
+                "IndexNumber": 1,
+                "ParentIndexNumber": 1,
+                "MediaSources": [{"Id": "ms1"}],
+            }
+        ],
+        SCRAPED_AT,
+    )
+    row = conn.execute(
+        """
+        SELECT index_number, parent_index_number, media_source_count
+        FROM items
+        WHERE id='meta1'
+        """
+    ).fetchone()
+    assert row["index_number"] == 1
+    assert row["parent_index_number"] == 1
+    assert row["media_source_count"] == 1
+
+
 # ---------------------------------------------------------------------------
 # get_pending_targets
 # ---------------------------------------------------------------------------
@@ -146,6 +175,70 @@ def test_get_pending_targets_excludes_not_found(conn):
     mark_not_found(conn, ["a1"])
     result = get_pending_targets(conn, ["/mnt/movies"])
     assert result == []
+
+
+# ---------------------------------------------------------------------------
+# get_bad_data_targets
+# ---------------------------------------------------------------------------
+
+
+def test_get_bad_data_targets_finds_episode_with_missing_numbers(conn):
+    upsert_items(
+        conn,
+        [
+            {
+                "Id": "e1",
+                "Name": "Broken Episode",
+                "Type": "Episode",
+                "Path": "/mnt/shows/a.mkv",
+                "MediaSources": [{"Id": "x"}],
+            }
+        ],
+        SCRAPED_AT,
+    )
+    result = get_bad_data_targets(conn)
+    assert len(result) == 1
+    assert result[0]["id"] == "e1"
+    assert result[0]["bad_reason"] == "missing season or episode number"
+
+
+def test_get_bad_data_targets_finds_media_without_versions(conn):
+    upsert_items(
+        conn,
+        [
+            {
+                "Id": "m1",
+                "Name": "Broken Movie",
+                "Type": "Movie",
+                "Path": "/mnt/movies/a.mkv",
+                "MediaSources": [],
+            }
+        ],
+        SCRAPED_AT,
+    )
+    result = get_bad_data_targets(conn)
+    assert len(result) == 1
+    assert result[0]["id"] == "m1"
+    assert result[0]["bad_reason"] == "no media versions"
+
+
+def test_get_bad_data_targets_excludes_valid_items(conn):
+    upsert_items(
+        conn,
+        [
+            {
+                "Id": "good1",
+                "Name": "Valid Episode",
+                "Type": "Episode",
+                "Path": "/mnt/shows/good.mkv",
+                "IndexNumber": 1,
+                "ParentIndexNumber": 1,
+                "MediaSources": [{"Id": "x"}],
+            }
+        ],
+        SCRAPED_AT,
+    )
+    assert get_bad_data_targets(conn) == []
 
 
 # ---------------------------------------------------------------------------

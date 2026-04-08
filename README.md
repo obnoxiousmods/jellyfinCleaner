@@ -65,7 +65,7 @@ usage: jellyfin_cleanup [-h] [--target-path PATH] [--url URL] [--api-key KEY]
                         [--retry-backoff-max SECS] [--timeout-connect SECS]
                         [--timeout-read SECS] [--timeout-write SECS]
                         [--timeout-pool SECS] [--force-rescrape] [--no-rescrape]
-                        [--yes] [--dry-run] [--verbose]
+                        [--yes] [--dry-run] [--badData] [--verbose]
                         [PATH ...]
 ```
 
@@ -87,6 +87,7 @@ usage: jellyfin_cleanup [-h] [--target-path PATH] [--url URL] [--api-key KEY]
 | `--no-rescrape` | `False` | Always use cached data |
 | `--yes`, `-y` | `False` | Skip delete confirmation prompt |
 | `--dry-run` | `False` | Preview without deleting |
+| `--badData` | `False` | Ignore path filters and target entries with bad metadata (missing season/episode values or missing media versions) |
 | `--verbose`, `-v` | `False` | Enable DEBUG logging |
 
 ## Development
@@ -105,8 +106,8 @@ ruff check .
 ## How It Works
 
 1. **Connectivity check** — verifies the server is reachable and the API key is valid.
-2. **Scrape** — pages through `GET /Items?Recursive=true&Fields=Path` and stores every item in a local SQLite database with its `delete_status = 'pending'`.
-3. **Target matching** — queries the DB for items whose `path` starts with any of the specified prefixes and whose `delete_status` is `pending` or `failed`.
+2. **Scrape** — pages through `GET /Items` (including path + metadata fields) and stores every item in a local SQLite database with its `delete_status = 'pending'`.
+3. **Target matching** — either queries the DB by `path` prefix (default) or, with `--badData`, finds entries with invalid episode/season metadata or no media versions.
 4. **Preview** — prints a grouped summary of matching items.
 5. **Delete** — sends concurrent batched `DELETE /Items?ids=…` requests; records each outcome (`deleted`, `not_found`, or `failed`) back to the DB.
 6. **Summary** — prints final DB statistics and warns if any items remain `failed`.
@@ -114,4 +115,3 @@ ruff check .
 ## License
 
 GPL-3.0 — see [LICENSE](LICENSE).
-

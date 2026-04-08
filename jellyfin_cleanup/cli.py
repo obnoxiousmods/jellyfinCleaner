@@ -148,6 +148,14 @@ def parse_args() -> argparse.Namespace:
         help="Preview matched items without deleting anything.",
     )
     parser.add_argument(
+        "--badData",
+        "--bad-data",
+        dest="bad_data",
+        action="store_true",
+        default=False,
+        help="Target entries with bad metadata (missing season/episode data or no versions).",
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",

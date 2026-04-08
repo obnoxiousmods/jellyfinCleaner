@@ -54,17 +54,23 @@ async def main(cfg: argparse.Namespace) -> None:
         else:
             log.info("Using cached data from %s", cfg.db)
 
-        # --- Find targets across all requested paths ---
-        if not cfg.target_paths:
+        # --- Find targets ---
+        if not cfg.bad_data and not cfg.target_paths:
             log.error(
                 "No target paths specified. "
                 "Pass paths as positional arguments or use --target-path."
             )
             sys.exit(1)
 
-        log.info("Target paths: %s", cfg.target_paths)
-        targets = db.get_pending_targets(cfg.target_paths)
-        log.info("Found %d pending/failed items across all target paths", len(targets))
+        if cfg.bad_data:
+            if cfg.target_paths:
+                log.info("--badData set; ignoring provided target paths.")
+            targets = db.get_bad_data_targets()
+            log.info("Found %d pending/failed items with bad metadata", len(targets))
+        else:
+            log.info("Target paths: %s", cfg.target_paths)
+            targets = db.get_pending_targets(cfg.target_paths)
+            log.info("Found %d pending/failed items across all target paths", len(targets))
 
         if not targets:
             log.info("Nothing to delete.")
@@ -73,14 +79,24 @@ async def main(cfg: argparse.Namespace) -> None:
 
         # --- Preview ---
         print(f"\nItems to delete ({len(targets)}):")
-        for tp in cfg.target_paths:
-            group = [r for r in targets if r["path"].startswith(tp)]
-            if group:
-                print(f"\n  [{tp}]  ({len(group)} items)")
-                for row in group[:10]:
-                    print(f"    [{row['type']:12}] {row['name']}")
-                if len(group) > 10:
-                    print(f"    ... and {len(group) - 10} more")
+        if cfg.bad_data:
+            for row in targets[:30]:
+                reason = row["bad_reason"] or "unknown bad metadata"
+                print(
+                    f"    [{row['type']:12}] {row['name']} ({reason})"
+                    f" - {row['path'] or '<no path>'}"
+                )
+            if len(targets) > 30:
+                print(f"    ... and {len(targets) - 30} more")
+        else:
+            for tp in cfg.target_paths:
+                group = [r for r in targets if r["path"].startswith(tp)]
+                if group:
+                    print(f"\n  [{tp}]  ({len(group)} items)")
+                    for row in group[:10]:
+                        print(f"    [{row['type']:12}] {row['name']}")
+                    if len(group) > 10:
+                        print(f"    ... and {len(group) - 10} more")
 
         if cfg.dry_run:
             log.info("Dry run — nothing deleted.")

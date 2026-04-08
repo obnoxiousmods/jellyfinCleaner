@@ -16,19 +16,7 @@ class Database:
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
-        self._conn.execute("""
-            CREATE TABLE IF NOT EXISTS items (
-                id                  TEXT PRIMARY KEY,
-                name                TEXT NOT NULL,
-                type                TEXT,
-                path                TEXT,
-                scraped_at          TEXT NOT NULL,
-                delete_status       TEXT DEFAULT 'pending',
-                -- 'pending' | 'deleted' | 'not_found' | 'failed'
-                delete_attempted_at TEXT,
-                delete_error        TEXT
-            )
-        """)
+        _initialize_items_table(self._conn)
         self._conn.commit()
 
     # -- context-manager support ------------------------------------------
@@ -64,13 +52,34 @@ class Database:
         with self._cursor() as cur:
             cur.executemany(
                 """
-                INSERT INTO items (id, name, type, path, scraped_at)
-                VALUES (:id, :name, :type, :path, :scraped_at)
+                INSERT INTO items (
+                    id,
+                    name,
+                    type,
+                    path,
+                    scraped_at,
+                    index_number,
+                    parent_index_number,
+                    media_source_count
+                )
+                VALUES (
+                    :id,
+                    :name,
+                    :type,
+                    :path,
+                    :scraped_at,
+                    :index_number,
+                    :parent_index_number,
+                    :media_source_count
+                )
                 ON CONFLICT(id) DO UPDATE SET
-                    name       = excluded.name,
-                    type       = excluded.type,
-                    path       = excluded.path,
-                    scraped_at = excluded.scraped_at
+                    name                = excluded.name,
+                    type                = excluded.type,
+                    path                = excluded.path,
+                    scraped_at          = excluded.scraped_at,
+                    index_number        = excluded.index_number,
+                    parent_index_number = excluded.parent_index_number,
+                    media_source_count  = excluded.media_source_count
                 """,
                 [
                     {
@@ -79,6 +88,9 @@ class Database:
                         "type": item.get("Type", ""),
                         "path": item.get("Path", ""),
                         "scraped_at": scraped_at,
+                        "index_number": item.get("IndexNumber"),
+                        "parent_index_number": item.get("ParentIndexNumber"),
+                        "media_source_count": _media_source_count(item),
                     }
                     for item in items
                 ],
@@ -127,6 +139,36 @@ class Database:
                 [(now, error, iid) for iid in item_ids],
             )
 
+    def get_bad_data_targets(self) -> list[sqlite3.Row]:
+        return self._conn.execute(
+            """
+            SELECT
+                id,
+                name,
+                type,
+                path,
+                CASE
+                    WHEN type='Episode'
+                         AND (parent_index_number IS NULL OR index_number IS NULL)
+                    THEN 'missing season or episode number'
+                    WHEN type='Season'
+                         AND index_number IS NULL
+                    THEN 'missing season number'
+                    WHEN type IN ('Episode', 'Movie', 'Video')
+                         AND COALESCE(media_source_count, 0) = 0
+                    THEN 'no media versions'
+                END AS bad_reason
+            FROM items
+            WHERE delete_status IN ('pending', 'failed')
+              AND (
+                (type='Episode' AND (parent_index_number IS NULL OR index_number IS NULL))
+                OR (type='Season' AND index_number IS NULL)
+                OR (type IN ('Episode', 'Movie', 'Video') AND COALESCE(media_source_count, 0) = 0)
+              )
+            ORDER BY type, path, name
+            """
+        ).fetchall()
+
     def stats(self) -> dict:
         rows = self._conn.execute(
             "SELECT delete_status, COUNT(*) AS n FROM items GROUP BY delete_status"
@@ -155,19 +197,7 @@ def db_connect(path: str) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS items (
-            id                  TEXT PRIMARY KEY,
-            name                TEXT NOT NULL,
-            type                TEXT,
-            path                TEXT,
-            scraped_at          TEXT NOT NULL,
-            delete_status       TEXT DEFAULT 'pending',
-            -- 'pending' | 'deleted' | 'not_found' | 'failed'
-            delete_attempted_at TEXT,
-            delete_error        TEXT
-        )
-    """)
+    _initialize_items_table(conn)
     conn.commit()
     return conn
 
@@ -185,6 +215,12 @@ def get_pending_targets(
     db = Database.__new__(Database)
     db._conn = conn
     return db.get_pending_targets(target_paths)
+
+
+def get_bad_data_targets(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    db = Database.__new__(Database)
+    db._conn = conn
+    return db.get_bad_data_targets()
 
 
 def mark_deleted(conn: sqlite3.Connection, item_ids: list[str]) -> None:
@@ -209,3 +245,38 @@ def db_stats(conn: sqlite3.Connection) -> dict:
     db = Database.__new__(Database)
     db._conn = conn
     return db.stats()
+
+
+def _initialize_items_table(conn: sqlite3.Connection) -> None:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS items (
+            id                  TEXT PRIMARY KEY,
+            name                TEXT NOT NULL,
+            type                TEXT,
+            path                TEXT,
+            scraped_at          TEXT NOT NULL,
+            delete_status       TEXT DEFAULT 'pending',
+            -- 'pending' | 'deleted' | 'not_found' | 'failed'
+            delete_attempted_at TEXT,
+            delete_error        TEXT,
+            index_number        INTEGER,
+            parent_index_number INTEGER,
+            media_source_count  INTEGER
+        )
+    """)
+    columns = {
+        row["name"] for row in conn.execute("PRAGMA table_info(items)").fetchall()
+    }
+    if "index_number" not in columns:
+        conn.execute("ALTER TABLE items ADD COLUMN index_number INTEGER")
+    if "parent_index_number" not in columns:
+        conn.execute("ALTER TABLE items ADD COLUMN parent_index_number INTEGER")
+    if "media_source_count" not in columns:
+        conn.execute("ALTER TABLE items ADD COLUMN media_source_count INTEGER")
+
+
+def _media_source_count(item: dict) -> int | None:
+    if "MediaSources" not in item:
+        return None
+    media_sources = item.get("MediaSources") or []
+    return len(media_sources)
