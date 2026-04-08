@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import random
 import sqlite3
@@ -132,12 +133,6 @@ class JellyfinClient:
         log.info("Checking connectivity → %s", cfg.url)
         try:
             r = await client.get("/System/Info/Public", timeout=cfg.timeout_connect)
-            info = r.json()
-            log.info(
-                "Server: %s  version %s",
-                info.get("ServerName"),
-                info.get("Version"),
-            )
         except httpx.ConnectError as exc:
             log.error("Connection failed: %s", exc)
             sys.exit(1)
@@ -145,11 +140,56 @@ class JellyfinClient:
             log.error("Timeout reaching server")
             sys.exit(1)
 
-        r = await client.get("/System/Info", timeout=cfg.timeout_connect)
+        if r.status_code != 200:
+            log.error(
+                "Unexpected status %d from /System/Info/Public.\n"
+                "  • Verify the URL is correct (default Jellyfin port is 8096).\n"
+                "  • Make sure the server is a Jellyfin instance.",
+                r.status_code,
+            )
+            sys.exit(1)
+
+        try:
+            info = r.json()
+        except (json.JSONDecodeError, ValueError):
+            log.error(
+                "Server at %s did not return valid JSON from /System/Info/Public.\n"
+                "  Response body (%d bytes): %.200s\n"
+                "  Possible causes:\n"
+                "  • The URL may point to a non-Jellyfin service.\n"
+                "  • A reverse proxy may be intercepting the request.\n"
+                "  • The port may be wrong (default Jellyfin port is 8096, not 8086).",
+                cfg.url,
+                len(r.content),
+                r.text[:200] if r.text else "<empty>",
+            )
+            sys.exit(1)
+
+        log.info(
+            "Server: %s  version %s",
+            info.get("ServerName"),
+            info.get("Version"),
+        )
+
+        try:
+            r = await client.get("/System/Info", timeout=cfg.timeout_connect)
+        except httpx.ConnectError as exc:
+            log.error("Connection failed on /System/Info: %s", exc)
+            sys.exit(1)
+        except httpx.TimeoutException:
+            log.error("Timeout reaching /System/Info")
+            sys.exit(1)
+
         if r.status_code == 200:
             log.info("API key valid ✓")
         elif r.status_code == 401:
             log.error("AUTH FAILED — API key rejected")
+            sys.exit(1)
+        elif r.status_code == 403:
+            log.error(
+                "AUTH FAILED — API key lacks permission.\n"
+                "  Ensure the key has administrator privileges."
+            )
             sys.exit(1)
         elif r.status_code == 404:
             log.error("404 on /System/Info — check base URL / path prefix")
